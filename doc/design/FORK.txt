@@ -18,7 +18,7 @@ Yet the new fork-channel will be shielded from messages passing up and down the 
 
 This is all done without modifying the configuration of the main channel.
 
-So if we have a main-channel, an application might want to require locking (using protocol PEER_LOCK), which is not
+So if we have a main-channel, an application might want to require locking (using protocol CENTRAL_LOCK), which is not
 defined in the main-channel's configuration. This is done by creating a fork-stack in FORK, identified by a fork-id.
 All messages with a header containing the fork-id will be sent up the stack with the same fork-id.
 Messages without a header will be sent up the main stack by FORK. An overview is shown below:
@@ -27,9 +27,9 @@ Messages without a header will be sent up the main stack by FORK. An overview is
       ^           ^      (fork-ch9)     ^
       |           |          ^          |
       |           |          |          |
-      |      ----------- --------- -----------
-      |      |PEER_LOCK| |COUNTER| |PEER_LOCK|
-   -------------------------------------------
+      |    -------------  --------- --------------
+      |    |CENTRAL_LOCK| |COUNTER| |CENTRAL_LOCK|
+   -----------------------------------------------
    |FORK     |  id=1   | |  id=2 | |  id=3   |
    -------------------------------------------
    |FRAG2|
@@ -40,10 +40,10 @@ Messages without a header will be sent up the main stack by FORK. An overview is
 
 
 The main-channel is shown to the left. Messages sent down it will *not* have a header. We have 3 fork-stacks: the first
-with id=1 has a PEER_LOCK protocol and a fork-channel (fork-ch7). The second (with id=2) has the COUNTER protocol on top
+with id=1 has a CENTRAL_LOCK protocol and a fork-channel (fork-ch7). The second (with id=2) has the COUNTER protocol on top
 and 2 fork-channels: fork-ch8 and fork-ch9. The third (with id=3) could be yet another application needing to use
-PEER_LOCK for its own purposes, but needing to have locking instances strictly isolated from the application using
-for-ch7 (on id=1): the two instances of PEER_LOCK will be independent, and they will thus not block on acquiring the
+CENTRAL_LOCK for its own purposes, but needing to have locking instances strictly isolated from the application using
+for-ch7 (on id=1): the two instances of CENTRAL_LOCK will be independent, and they will thus not block on acquiring the
 same locks.
 
 
