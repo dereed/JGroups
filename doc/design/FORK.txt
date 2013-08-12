@@ -152,3 +152,7 @@ FORK would be configured through an external XML file, which can then define its
 RELAY2).
 
 
+Misc
+----
+- CREATE_FORK_STACK: install a given fork-stack config in all cluster nodes. Possibly also add a corresponding
+DELETE_FORK_STACK
