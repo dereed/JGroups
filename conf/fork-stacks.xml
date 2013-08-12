@@ -1,10 +1,5 @@
-
 <?xml version="1.0"?>
 
-
-<!--
-    Example of a fork-stack definition, defining a stack "counter" and another one "locking". See FORK for details.
-  -->
 
 <fork-stacks xmlns="fork-stacks">
 
@@ -15,11 +10,11 @@
         </config>
     </fork-stack>
 
-    <fork-stack id="locking">
-        <config>
-            <CENTRAL_LOCK num_backups="2"/>
-        </config>
-    </fork-stack>
+   <fork-stack id="locking">
+       <config>
+           <CENTRAL_LOCK num_backups="2"/>
+       </config>
+   </fork-stack>
 
 
 </fork-stacks>

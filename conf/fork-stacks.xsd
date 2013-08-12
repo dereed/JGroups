@@ -16,11 +16,10 @@
 
     <xs:element name="fork-stacks">
         <xs:complexType>
-            <xs:sequence>
+            <xs:sequence minOccurs="1" maxOccurs="unbounded">
                 <xs:element name="fork-stack" type="ForkStack"/>
             </xs:sequence>
         </xs:complexType>
-
     </xs:element>
 
 
