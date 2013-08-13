@@ -4,13 +4,23 @@ import org.jgroups.Event;
 import org.jgroups.Header;
 import org.jgroups.Message;
 import org.jgroups.annotations.MBean;
+import org.jgroups.annotations.ManagedAttribute;
+import org.jgroups.annotations.Property;
 import org.jgroups.conf.ClassConfigurator;
+import org.jgroups.conf.ProtocolConfiguration;
+import org.jgroups.fork.ForkConfig;
+import org.jgroups.fork.ForkProtocol;
+import org.jgroups.fork.ForkProtocolStack;
+import org.jgroups.stack.Configurator;
 import org.jgroups.stack.Protocol;
+import org.jgroups.stack.ProtocolStack;
 import org.jgroups.util.MessageBatch;
 import org.jgroups.util.Util;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -26,8 +36,11 @@ import java.util.concurrent.ConcurrentMap;
  */
 @MBean(description="Implementation of FORK protocol")
 public class FORK extends Protocol {
-
     public static short ID=ClassConfigurator.getProtocolId(FORK.class);
+
+    @Property(description="Points to an XML file defining the fork-stacks, which will be created at initialization. " +
+      "Ignored if null")
+    protected String config;
 
     // mappings between fork-stack-ids and fork-stacks (bottom-most protocol)
     protected final ConcurrentMap<String,Protocol> fork_stacks=new ConcurrentHashMap<String,Protocol>();
@@ -35,6 +48,17 @@ public class FORK extends Protocol {
 
     public Protocol get(String fork_stack_id)                        {return fork_stacks.get(fork_stack_id);}
     public Protocol putIfAbsent(String fork_stack_id, Protocol prot) {return fork_stacks.put(fork_stack_id, prot);}
+
+
+    @ManagedAttribute(description="Number of fork-stacks")
+    public int getForkStacks() {return fork_stacks.size();}
+
+    public void init() throws Exception {
+        super.init();
+        if(config != null)
+            createForkStacks(config, false);
+    }
+
 
 
     public Object up(Event evt) {
@@ -90,6 +114,48 @@ public class FORK extends Protocol {
         if(!batch.isEmpty())
             up_prot.up(batch);
     }
+
+
+    protected void createForkStacks(String config, boolean replace_existing) throws Exception {
+        InputStream in=new FileInputStream(config);
+        Map<String,List<ProtocolConfiguration>> protocols=ForkConfig.parse(in);
+        for(Map.Entry<String,List<ProtocolConfiguration>> entry: protocols.entrySet()) {
+            String fork_stack_id=entry.getKey();
+            if(get(fork_stack_id) != null && !replace_existing)
+                continue;
+            ProtocolStack fork_prot_stack=new ForkProtocolStack();
+            Protocol prot=getBottomProt(createForkStack(fork_prot_stack,entry.getValue()));
+
+            fork_prot_stack.setDownProtocol(prot);
+            Protocol bottom=new ForkProtocol(fork_stack_id);
+            bottom.setDownProtocol(this);
+            bottom.setUpProtocol(prot);
+            prot.setDownProtocol(bottom);
+            fork_stacks.put(fork_stack_id, bottom);
+
+            // call init() on the created protocols, from bottom to top
+            Protocol current=prot;
+            while(current != null && !(current instanceof ProtocolStack)) {
+                current.init();
+                current=current.getUpProtocol();
+            }
+        }
+    }
+
+    protected static Protocol getBottomProt(Protocol top) {
+        Protocol retval=top;
+        while(retval != null && retval.getDownProtocol() != null)
+            retval=retval.getDownProtocol();
+        return retval;
+    }
+
+    /** Creates a fork-stack from the configuration, initializes all protocols (setting values),
+     * sets the protocol stack as top protocol, connects the protocols and calls init() on them. Returns
+     * the bottom-most protocol */
+    protected static Protocol createForkStack(ProtocolStack stack, List<ProtocolConfiguration> protocol_configs) throws Exception {
+        return Configurator.setupProtocolStack(protocol_configs, stack);
+    }
+
 
     public static class ForkHeader extends Header {
         protected String fork_stack_id, fork_channel_id;

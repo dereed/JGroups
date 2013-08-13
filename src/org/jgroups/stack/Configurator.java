@@ -84,7 +84,7 @@ public class Configurator {
      *   -----------------------
      * </pre>
      */
-    private static Protocol setupProtocolStack(List<ProtocolConfiguration> protocol_configs, ProtocolStack st) throws Exception {
+    public static Protocol setupProtocolStack(List<ProtocolConfiguration> protocol_configs, ProtocolStack st) throws Exception {
         List<Protocol> protocols=createProtocols(protocol_configs, st);
         if(protocols == null)
             return null;
