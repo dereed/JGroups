@@ -123,37 +123,63 @@ public class FORK extends Protocol {
             String fork_stack_id=entry.getKey();
             if(get(fork_stack_id) != null && !replace_existing)
                 continue;
-            ProtocolStack fork_prot_stack=new ForkProtocolStack();
-            Protocol prot=getBottomProt(createForkStack(fork_prot_stack,entry.getValue()));
 
-            fork_prot_stack.setDownProtocol(prot);
-            Protocol bottom=new ForkProtocol(fork_stack_id);
-            bottom.setDownProtocol(this);
-            bottom.setUpProtocol(prot);
-            prot.setDownProtocol(bottom);
-            fork_stacks.put(fork_stack_id, bottom);
-
-            // call init() on the created protocols, from bottom to top
-            Protocol current=prot;
-            while(current != null && !(current instanceof ProtocolStack)) {
-                current.init();
-                current=current.getUpProtocol();
-            }
+            ProtocolStack  fork_prot_stack=new ForkProtocolStack();
+            List<Protocol> prots=createProtocols(fork_prot_stack,entry.getValue());
+            createForkStack(fork_stack_id, fork_prot_stack, replace_existing, prots);
         }
     }
 
-    protected static Protocol getBottomProt(Protocol top) {
-        Protocol retval=top;
-        while(retval != null && retval.getDownProtocol() != null)
-            retval=retval.getDownProtocol();
-        return retval;
+
+    /**
+     * Creates a new fork-stack from protocols and adds it into the hashmap of fork-stack (key is fork_stack_id).
+     * Method init() will be called on each protocol, from bottom to top.
+     * @param fork_stack_id The key under which the new fork-stack should be added to the fork-stacks hashmap
+     * @param stack The protocol stack under which to create the protocols
+     * @param replace_existing If true, and existing fork-stack is simply replaced (de-initializing it first).
+     *                         Otherwise, if the stack already exists, the new fork-stack will not be created.
+     * @param protocols A list of protocols from <em>bottom to top</em> to be inserted. They will be snadwiched
+     *                  between ForkProtocolStack (top) and ForkProtocol (bottom). The list can be empty (or null) in
+     *                  which case we won't create any protocols, but still have a separate fork-stack inserted.
+     */
+    public void createForkStack(String fork_stack_id, final ProtocolStack stack, boolean replace_existing,
+                                   List<Protocol> protocols) throws Exception {
+        if(get(fork_stack_id) != null && !replace_existing) {
+            log.warn("fork-stack %s is already present, won't replace it", fork_stack_id);
+            return;
+        }
+
+        Protocol current=stack;                          // top
+        if(protocols != null && !protocols.isEmpty()) {
+            for(int i=protocols.size()-1; i >= 0; i--) {
+                Protocol prot=protocols.get(i);
+                current.setDownProtocol(prot);
+                prot.setUpProtocol(current);
+                current=prot;
+            }
+        }
+
+        Protocol bottom=new ForkProtocol(fork_stack_id); // bottom
+        current.setDownProtocol(bottom);
+        bottom.setUpProtocol(current);
+        bottom.setDownProtocol(this);
+        fork_stacks.put(fork_stack_id, bottom);
+
+        // call init() on the created protocols, from bottom to top
+        //current=bottom;
+        while(current != null && !(current instanceof ProtocolStack)) {
+            current.init();
+            current=current.getUpProtocol();
+        }
     }
+
+
 
     /** Creates a fork-stack from the configuration, initializes all protocols (setting values),
      * sets the protocol stack as top protocol, connects the protocols and calls init() on them. Returns
-     * the bottom-most protocol */
-    protected static Protocol createForkStack(ProtocolStack stack, List<ProtocolConfiguration> protocol_configs) throws Exception {
-        return Configurator.setupProtocolStack(protocol_configs, stack);
+     * the protocols in a list, from bottom to top */
+    protected static List<Protocol> createProtocols(ProtocolStack stack, List<ProtocolConfiguration> protocol_configs) throws Exception {
+        return Configurator.createProtocols(protocol_configs,stack);
     }
 
 

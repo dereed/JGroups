@@ -35,14 +35,15 @@ public class ForkChannel extends JChannel {
      *                 {@link ProtocolStack#BELOW} are accepted. Ignored if create_fork_if_absent is false.
      * @param neighbor The class of the neighbor protocol below or above which the newly created FORK protocol will
      *                 be inserted. Ignored if create_fork_if_absent is false.
-     * @param protocols A list of protocols (from top to bottom) to insert as the fork_stack in FORK under the given
-     *                  fork_stack_id. If the fork-stack with fork_stack_id already exists, an exception will be thrown.
+     * @param protocols A list of protocols (<em>from bottom to top</em> !) to insert as the fork_stack in FORK under the
+     *                  given fork_stack_id. If the fork-stack with fork_stack_id already exists, an exception will be
+     *                  thrown.
      *                  Can be null if no protocols should be added. This may be the case when an app only wants to use
      *                  a ForkChannel to mux/demux messages, but doesn't need a different protocol stack.
      *
      * @throws Exception
      */
-    public ForkChannel(Channel main_channel, String fork_stack_id, String fork_channel_id,
+    public ForkChannel(final Channel main_channel, String fork_stack_id, String fork_channel_id,
                        boolean create_fork_if_absent, int position, Class<? extends Protocol> neighbor,
                        Protocol ... protocols) throws Exception {
 
@@ -54,8 +55,16 @@ public class ForkChannel extends JChannel {
         this.fork_channel_id=fork_channel_id;
 
         main_channel.addChannelListener(new ChannelListener() {
-            public void channelConnected(Channel channel)    {state=State.CONNECTED;}
-            public void channelDisconnected(Channel channel) {state=State.OPEN;}
+            public void channelConnected(Channel channel)    {
+                state=State.CONNECTED;
+                local_addr=main_channel.getAddress();
+                cluster_name=main_channel.getClusterName();
+                name=main_channel.getName();
+                Event evt=new Event(Event.SET_LOCAL_ADDRESS, local_addr);
+                if(up_handler != null)
+                    up_handler.up(evt);
+            }
+            public void channelDisconnected(Channel channel) {state=State.OPEN; local_addr=null;cluster_name=null;name=null;}
             public void channelClosed(Channel channel)       {state=State.CLOSED;}
         });
 
@@ -70,30 +79,12 @@ public class ForkChannel extends JChannel {
         }
         // Now FORK has either been found or created and is not null
 
-        // Find the fork-stack
+        // Create the fork-stack if absent
         Protocol bottom_prot=fork.get(fork_stack_id);
-        boolean created=false;
         if(bottom_prot == null) {
-            // create the fork-stack first
-            bottom_prot=createForkStack(fork_stack_id, protocols);
-            Protocol existing=fork.putIfAbsent(fork_stack_id, bottom_prot);
-            if(existing != null)
-                bottom_prot=existing;
-            else
-                created=true;
+            fork.createForkStack(fork_stack_id, new ForkProtocolStack(), false, Arrays.asList(protocols));
+            bottom_prot=fork.get(fork_stack_id);
         }
-
-        if(created) {
-
-            // todo: call init() on all protocols (--> may need access to transport prot to grab timer)
-
-            for(Protocol p: protocols)
-                p.init(); // certainly NOT !!!!!!
-
-
-            bottom_prot.setDownProtocol(fork);
-        }
-
 
         fork_stack=getForkStack(bottom_prot);
 
