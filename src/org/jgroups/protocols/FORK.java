@@ -141,12 +141,14 @@ public class FORK extends Protocol {
      * @param protocols A list of protocols from <em>bottom to top</em> to be inserted. They will be snadwiched
      *                  between ForkProtocolStack (top) and ForkProtocol (bottom). The list can be empty (or null) in
      *                  which case we won't create any protocols, but still have a separate fork-stack inserted.
+     * @return The bottom-most protocol of the new stack, or the existing stack (if present)
      */
-    public void createForkStack(String fork_stack_id, final ProtocolStack stack, boolean replace_existing,
-                                   List<Protocol> protocols) throws Exception {
-        if(get(fork_stack_id) != null && !replace_existing) {
+    public Protocol createForkStack(String fork_stack_id, final ProtocolStack stack, boolean replace_existing,
+                                    List<Protocol> protocols) throws Exception {
+        Protocol bottom;
+        if((bottom=get(fork_stack_id)) != null && !replace_existing) {
             log.warn("fork-stack %s is already present, won't replace it", fork_stack_id);
-            return;
+            return bottom;
         }
 
         Protocol current=stack;                          // top
@@ -159,7 +161,7 @@ public class FORK extends Protocol {
             }
         }
 
-        Protocol bottom=new ForkProtocol(fork_stack_id); // bottom
+        bottom=new ForkProtocol(fork_stack_id); // bottom
         current.setDownProtocol(bottom);
         bottom.setUpProtocol(current);
         bottom.setDownProtocol(this);
@@ -171,6 +173,7 @@ public class FORK extends Protocol {
             current.init();
             current=current.getUpProtocol();
         }
+        return bottom;
     }
 
 

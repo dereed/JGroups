@@ -81,10 +81,8 @@ public class ForkChannel extends JChannel {
 
         // Create the fork-stack if absent
         Protocol bottom_prot=fork.get(fork_stack_id);
-        if(bottom_prot == null) {
-            fork.createForkStack(fork_stack_id, new ForkProtocolStack(), false, Arrays.asList(protocols));
-            bottom_prot=fork.get(fork_stack_id);
-        }
+        if(bottom_prot == null)
+            bottom_prot=fork.createForkStack(fork_stack_id, new ForkProtocolStack(), false, Arrays.asList(protocols));
 
         fork_stack=getForkStack(bottom_prot);
 
@@ -183,14 +181,9 @@ public class ForkChannel extends JChannel {
     }
 
 
-    protected static ForkProtocolStack getForkStack(Protocol bottom_prot) {
-        Protocol prot=bottom_prot;
-        while(prot != null) {
-            if(prot.getUpProtocol() != null)
-                prot=prot.getUpProtocol();
-            else
-                break;
-        }
+    protected static ForkProtocolStack getForkStack(Protocol prot) {
+        while(prot != null && !(prot instanceof ForkProtocolStack))
+            prot=prot.getUpProtocol();
         return prot instanceof ForkProtocolStack? (ForkProtocolStack)prot : null;
     }
 
