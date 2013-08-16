@@ -119,6 +119,7 @@ public class ForkChannel extends JChannel implements ChannelListener {
         Channel existing_ch=((ForkProtocolStack)prot_stack).putIfAbsent(fork_channel_id,this);
         if(existing_ch != null && existing_ch != this)
             throw new IllegalArgumentException("fork-channel with id=" + fork_channel_id + " is already present");
+        setLocalAddress(local_addr);
         View current_view=main_channel.getView();
         if(current_view != null)
             up(new Event(Event.VIEW_CHANGE, current_view));
@@ -185,6 +186,15 @@ public class ForkChannel extends JChannel implements ChannelListener {
 
     public void getState(Address target, long timeout) throws Exception {
         throw new UnsupportedOperationException();
+    }
+
+    protected void setLocalAddress(Address local_addr) {
+        if(local_addr != null) {
+            Event evt=new Event(Event.SET_LOCAL_ADDRESS, local_addr);
+            ((ForkProtocolStack)prot_stack).setLocalAddress(local_addr); // sets the address only in the protocols managed by the fork-prot-stack
+            if(up_handler != null)
+                up_handler.up(evt);
+        }
     }
 
 

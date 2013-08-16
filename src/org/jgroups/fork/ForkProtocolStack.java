@@ -1,5 +1,6 @@
 package org.jgroups.fork;
 
+import org.jgroups.Address;
 import org.jgroups.Event;
 import org.jgroups.JChannel;
 import org.jgroups.Message;
@@ -20,7 +21,7 @@ import java.util.concurrent.ConcurrentMap;
  * @since  3.4
  */
 public class ForkProtocolStack extends ProtocolStack {
-
+    protected Address local_addr;
     protected final ConcurrentMap<String,JChannel> fork_channels=new ConcurrentHashMap<String,JChannel>();
 
     public JChannel get(String fork_channel_id)                                {return fork_channels.get(fork_channel_id);}
@@ -29,6 +30,12 @@ public class ForkProtocolStack extends ProtocolStack {
 
     public Object down(Event evt) {
         return down_prot.down(evt);
+    }
+
+    public void setLocalAddress(Address addr) {
+        if(local_addr != null && addr != null && local_addr.equals(addr))
+            return;
+        down_prot.down(new Event(Event.SET_LOCAL_ADDRESS, addr));
     }
 
     public Object up(Event evt) {
