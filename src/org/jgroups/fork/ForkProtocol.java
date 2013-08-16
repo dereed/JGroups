@@ -36,6 +36,7 @@ public class ForkProtocol extends Protocol {
                     hdr.setForkStackId(fork_stack_id);
                 break;
             case Event.SET_LOCAL_ADDRESS:
+            case Event.VIEW_CHANGE:
                 return null; // don't propagate further down, this is only important for the main stack
         }
         return down_prot.down(evt);

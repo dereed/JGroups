@@ -35,6 +35,7 @@ public class ForkProtocolStack extends ProtocolStack {
     public void setLocalAddress(Address addr) {
         if(local_addr != null && addr != null && local_addr.equals(addr))
             return;
+        this.local_addr=addr;
         down_prot.down(new Event(Event.SET_LOCAL_ADDRESS, addr));
     }
 

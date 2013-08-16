@@ -121,8 +121,10 @@ public class ForkChannel extends JChannel implements ChannelListener {
             throw new IllegalArgumentException("fork-channel with id=" + fork_channel_id + " is already present");
         setLocalAddress(local_addr);
         View current_view=main_channel.getView();
-        if(current_view != null)
+        if(current_view != null) {
             up(new Event(Event.VIEW_CHANGE, current_view));
+            prot_stack.down(new Event(Event.VIEW_CHANGE, current_view)); //todo: check if we need to pass it up instead of down !
+        }
         notifyChannelConnected(this);
     }
 
