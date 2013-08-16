@@ -4,11 +4,11 @@ import org.jgroups.*;
 import org.jgroups.protocols.FORK;
 import org.jgroups.stack.Protocol;
 import org.jgroups.stack.ProtocolStack;
+import org.jgroups.util.Util;
 
-import java.util.ArrayList;
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Implementation of a ForkChannel, which is a light-weight channel. Not all methods are supported,
@@ -17,13 +17,29 @@ import java.util.Map;
  * @author Bela Ban
  * @since  3.4
  */
-public class ForkChannel extends JChannel {
+public class ForkChannel extends JChannel implements ChannelListener {
     protected final Channel           main_channel;
     protected final String            fork_channel_id;
-    protected final ForkProtocolStack fork_stack;
+    // protected final ForkProtocolStack fork_stack;
+
+
+    protected static final Field[]   copied_fields;
+
+    static {
+        String[] fields={"state", "local_addr", "name", "cluster_name", "my_view"};
+        copied_fields=new Field[fields.length];
+        for(int i=0; i < fields.length; i++) {
+            Field field=Util.getField(JChannel.class, fields[i]);
+            if(field == null)
+                throw new IllegalStateException("field \"" + fields[i] + "\" not found in JChannel");
+            copied_fields[i]=field;
+        }
+    }
+
 
     /**
-     * Creates a new ForkStack instance
+     * Creates a new fork-channel from a main-channel. The channel is unconnected and {@link ForkChannel#connect(String)}
+     * needs to be called to send and receive messages,
      * @param main_channel The main-channel. The lifetime of the newly created channel will be less than or equal to
      *                     the main-channel
      * @param fork_stack_id The ID to associate the fork-stack with in FORK
@@ -54,94 +70,88 @@ public class ForkChannel extends JChannel {
         this.main_channel=main_channel;
         this.fork_channel_id=fork_channel_id;
 
-        main_channel.addChannelListener(new ChannelListener() {
-            public void channelConnected(Channel channel)    {
-                state=State.CONNECTED;
-                local_addr=main_channel.getAddress();
-                cluster_name=main_channel.getClusterName();
-                name=main_channel.getName();
-                Event evt=new Event(Event.SET_LOCAL_ADDRESS, local_addr);
-                if(up_handler != null)
-                    up_handler.up(evt);
-            }
-            public void channelDisconnected(Channel channel) {state=State.OPEN; local_addr=null;cluster_name=null;name=null;}
-            public void channelClosed(Channel channel)       {state=State.CLOSED;}
-        });
-
-        // Find the FORK protocol
-        ProtocolStack stack=main_channel.getProtocolStack();
-        FORK fork=(FORK)stack.findProtocol(FORK.class);
-        if(fork == null) {
-            if(!create_fork_if_absent)
-                throw new IllegalArgumentException("FORK not found in main stack");
-            fork=new FORK();
-            stack.insertProtocol(fork, position, neighbor);
-        }
-        // Now FORK has either been found or created and is not null
-
-        // Create the fork-stack if absent
+        FORK fork=getFORK(main_channel, position, neighbor, create_fork_if_absent);
         Protocol bottom_prot=fork.get(fork_stack_id);
-        if(bottom_prot == null)
+        if(bottom_prot == null) // Create the fork-stack if absent
             bottom_prot=fork.createForkStack(fork_stack_id, new ForkProtocolStack(), false, Arrays.asList(protocols));
 
-        fork_stack=getForkStack(bottom_prot);
-
-        Channel existing_ch=fork_stack.putIfAbsent(fork_channel_id,this);
-        if(existing_ch != null && existing_ch != this)
-            throw new IllegalArgumentException("fork-channel with id=" + fork_channel_id + " is already present");
+        prot_stack=getForkStack(bottom_prot);
+        flush_supported=main_channel.flushSupported();
     }
 
-
-
-    public Address getAddress() {
-        return main_channel.getAddress();
-    }
-
-    public String getName() {
-        return main_channel.getName();
-    }
-
-    public String getName(Address member) {
-        return main_channel.getName(member);
-    }
 
     public void setName(String name) {
+        log.error("name (%s) cannot be set in a fork-channel", name);
     }
 
     public JChannel name(String name) {
+        log.error("name (%s) cannot be set in a fork-channel", name);
         return this;
     }
 
-    public View getView() {
-        return main_channel.getView();
+    public void channelConnected(Channel channel) {
+        copyFields();
+        Event evt=new Event(Event.SET_LOCAL_ADDRESS, local_addr);
+        if(up_handler != null)
+            up_handler.up(evt);
     }
 
-    public String getClusterName() {
-        return main_channel.getClusterName();
+    public void channelDisconnected(Channel channel) {
+        copyFields();
     }
 
-    public ProtocolStack getProtocolStack() {
-        return null;
+    public void channelClosed(Channel channel) {
+        copyFields();
     }
 
-    public boolean flushSupported() {
-        return false;
-    }
-
-    public Map<String,Object> dumpStats() {
-        return main_channel.dumpStats();
-    }
-
+    /**
+     * Connects the fork-channel, which will be operational after this. Note that the fork-channel will
+     * have the same state as the main-channel, ie. if the main-channel is disconnected, so will the fork-channel be,
+     * even if connect() was called. This connect() method essentially adds the fork-channel to the fork-stack's hashmap,
+     * ready to send/receive messages as soon as the main-channel has been connected.<p/>
+     * This method does <em>not</em> affect the main-channel.
+     * @param cluster_name Ignored, will be the same as the main-channel's cluster name
+     * @throws Exception
+     */
     public void connect(String cluster_name) throws Exception {
+        this.main_channel.addChannelListener(this);
+        copyFields();
+        Channel existing_ch=((ForkProtocolStack)prot_stack).putIfAbsent(fork_channel_id,this);
+        if(existing_ch != null && existing_ch != this)
+            throw new IllegalArgumentException("fork-channel with id=" + fork_channel_id + " is already present");
+        View current_view=main_channel.getView();
+        if(current_view != null)
+            up(new Event(Event.VIEW_CHANGE, current_view));
+        notifyChannelConnected(this);
     }
 
     public void connect(String cluster_name, Address target, long timeout) throws Exception {
+        throw new UnsupportedOperationException("connect() with state transfer is not supported by a fork-channel");
     }
 
+    /** Removes the fork-channel from the fork-stack's hashmap and resets its state. Does <em>not</em> affect the
+     * main-channel */
     public void disconnect() {
+        ((ForkProtocolStack)prot_stack).remove(fork_channel_id);
+        nullFields();
+        state=State.OPEN;
+        notifyChannelDisconnected(this);
     }
 
+    /** Closes the fork-channel, essentially setting its state to CLOSED. Note that - contrary to a regular channel -
+     * a closed fork-channel can be connected again: this means re-attaching the fork-channel to the main-channel*/
     public void close() {
+        if(state == State.CLOSED)
+            return;
+        disconnect();                     // leave group if connected
+        state=State.CLOSED;
+        notifyChannelClosed(this);
+    }
+
+    public Object down(Event evt) {
+        if(evt.getType() == Event.MSG)
+            setHeader((Message)evt.getArg());
+        return super.down(evt);
     }
 
     public void send(Message msg) throws Exception {
@@ -153,33 +163,43 @@ public class ForkChannel extends JChannel {
             hdr=new FORK.ForkHeader(null, fork_channel_id);
             msg.putHeader(FORK.ID, hdr);
         }
-        fork_stack.down(new Event(Event.MSG, msg));
+        prot_stack.down(new Event(Event.MSG, msg));
     }
 
-    public void send(Address dst, Object obj) throws Exception {
-    }
-
-    public void send(Address dst, byte[] buf) throws Exception {
-    }
-
-    public void send(Address dst, byte[] buf, int offset, int length) throws Exception {
-    }
 
     public void startFlush(List<Address> flushParticipants, boolean automatic_resume) throws Exception {
+        throw new UnsupportedOperationException();
     }
 
     public void startFlush(boolean automatic_resume) throws Exception {
+        throw new UnsupportedOperationException();
     }
 
     public void stopFlush() {
+        throw new UnsupportedOperationException();
     }
 
     public void stopFlush(List<Address> flushParticipants) {
+        throw new UnsupportedOperationException();
     }
 
     public void getState(Address target, long timeout) throws Exception {
+        throw new UnsupportedOperationException();
     }
 
+
+    protected static FORK getFORK(Channel ch, int position, Class<? extends Protocol> neighbor,
+                                  boolean create_fork_if_absent) throws Exception {
+        ProtocolStack stack=ch.getProtocolStack();
+        FORK fork=(FORK)stack.findProtocol(FORK.class);
+        if(fork == null) {
+            if(!create_fork_if_absent)
+                throw new IllegalArgumentException("FORK not found in main stack");
+            fork=new FORK();
+            stack.insertProtocol(fork, position, neighbor);
+        }
+        return fork;
+    }
 
     protected static ForkProtocolStack getForkStack(Protocol prot) {
         while(prot != null && !(prot instanceof ForkProtocolStack))
@@ -187,24 +207,27 @@ public class ForkChannel extends JChannel {
         return prot instanceof ForkProtocolStack? (ForkProtocolStack)prot : null;
     }
 
-    protected static Protocol createForkStack(String fork_stack_id, Protocol... protocols) {
-        ForkProtocolStack fork_stack=new ForkProtocolStack();
-        Protocol bottom_prot=new ForkProtocol(fork_stack_id);
-        List<Protocol> prots=new ArrayList<Protocol>();
-        prots.add(fork_stack);
-        prots.addAll(Arrays.asList(protocols));
-        prots.add(bottom_prot);
-
-        // Connect down protocols
-        for(int i=0; i < prots.size(); i++) {
-            Protocol current=prots.get(i);
-            Protocol next=i+1 >= prots.size()? null : prots.get(i+1);
-            if(next != null) {
-                current.setDownProtocol(next);
-                next.setUpProtocol(current);
-            }
-        }
-        // bottom_prot.setDownProtocol(fork);
-        return bottom_prot;
+    protected void setHeader(Message msg) {
+        FORK.ForkHeader hdr=(FORK.ForkHeader)msg.getHeader(FORK.ID);
+        if(hdr != null)
+            hdr.setForkChannelId(fork_channel_id);
+        else
+            msg.putHeader(FORK.ID, new FORK.ForkHeader(null, fork_channel_id));
     }
+
+
+    /** Copies state from main-channel to this fork-channel */
+    protected void copyFields() {
+        for(Field field: copied_fields) {
+            Object value=Util.getField(field,main_channel);
+            Util.setField(field, this, value);
+        }
+    }
+
+    protected void nullFields() {
+        for(Field field: copied_fields)
+            Util.setField(field, this, null);
+    }
+
+
 }

@@ -23,8 +23,9 @@ public class ForkProtocolStack extends ProtocolStack {
 
     protected final ConcurrentMap<String,JChannel> fork_channels=new ConcurrentHashMap<String,JChannel>();
 
-    public JChannel get(String fork_channel_id)                               {return fork_channels.get(fork_channel_id);}
+    public JChannel get(String fork_channel_id)                                {return fork_channels.get(fork_channel_id);}
     public JChannel putIfAbsent(String fork_channel_id, JChannel fork_channel) {return fork_channels.putIfAbsent(fork_channel_id, fork_channel);}
+    public void     remove(String fork_channel_id)                             {fork_channels.remove(fork_channel_id);}
 
     public Object down(Event evt) {
         return down_prot.down(evt);

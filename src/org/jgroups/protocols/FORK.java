@@ -165,6 +165,7 @@ public class FORK extends Protocol {
         current.setDownProtocol(bottom);
         bottom.setUpProtocol(current);
         bottom.setDownProtocol(this);
+        stack.topProtocol(stack.getDownProtocol()).bottomProtocol(bottom);
         fork_stacks.put(fork_stack_id, bottom);
 
         // call init() on the created protocols, from bottom to top
