@@ -80,6 +80,10 @@ public class ForkProtocolStack extends ProtocolStack {
             String fork_channel_id=entry.getKey();
             List<Message> list=entry.getValue();
             JChannel fork_channel=get(fork_channel_id);
+            if(fork_channel == null) {
+                log.warn("fork-channel for id=%s not found; discarding message", fork_channel_id);
+                continue;
+            }
             MessageBatch mb=new MessageBatch(batch.dest(), batch.sender(), batch.clusterName(), batch.multicast(), list);
             try {
                 fork_channel.up(mb);

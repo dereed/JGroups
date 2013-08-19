@@ -91,6 +91,7 @@ public class ForkChannel extends JChannel implements ChannelListener {
 
     public void channelConnected(Channel channel) {
         copyFields();
+        if(local_addr == null) return;
         Event evt=new Event(Event.SET_LOCAL_ADDRESS, local_addr);
         if(up_handler != null)
             up_handler.up(evt);
