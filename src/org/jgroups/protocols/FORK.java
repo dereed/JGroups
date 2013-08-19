@@ -138,7 +138,7 @@ public class FORK extends Protocol {
      * @param stack The protocol stack under which to create the protocols
      * @param replace_existing If true, and existing fork-stack is simply replaced (de-initializing it first).
      *                         Otherwise, if the stack already exists, the new fork-stack will not be created.
-     * @param protocols A list of protocols from <em>bottom to top</em> to be inserted. They will be snadwiched
+     * @param protocols A list of protocols from <em>bottom to top</em> to be inserted. They will be sandwiched
      *                  between ForkProtocolStack (top) and ForkProtocol (bottom). The list can be empty (or null) in
      *                  which case we won't create any protocols, but still have a separate fork-stack inserted.
      * @return The bottom-most protocol of the new stack, or the existing stack (if present)

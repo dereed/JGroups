@@ -2,6 +2,7 @@ package org.jgroups.fork;
 
 import org.jgroups.*;
 import org.jgroups.protocols.FORK;
+import org.jgroups.stack.AddressGenerator;
 import org.jgroups.stack.Protocol;
 import org.jgroups.stack.ProtocolStack;
 import org.jgroups.util.Util;
@@ -39,7 +40,7 @@ public class ForkChannel extends JChannel implements ChannelListener {
 
     /**
      * Creates a new fork-channel from a main-channel. The channel is unconnected and {@link ForkChannel#connect(String)}
-     * needs to be called to send and receive messages,
+     * needs to be called to send and receive messages.
      * @param main_channel The main-channel. The lifetime of the newly created channel will be less than or equal to
      *                     the main-channel
      * @param fork_stack_id The ID to associate the fork-stack with in FORK
@@ -73,10 +74,30 @@ public class ForkChannel extends JChannel implements ChannelListener {
         FORK fork=getFORK(main_channel, position, neighbor, create_fork_if_absent);
         Protocol bottom_prot=fork.get(fork_stack_id);
         if(bottom_prot == null) // Create the fork-stack if absent
-            bottom_prot=fork.createForkStack(fork_stack_id, new ForkProtocolStack(), false, Arrays.asList(protocols));
+            bottom_prot=fork.createForkStack(fork_stack_id, new ForkProtocolStack(), false,
+                                             protocols == null? null : Arrays.asList(protocols));
 
         prot_stack=getForkStack(bottom_prot);
         flush_supported=main_channel.flushSupported();
+    }
+
+    /**
+     * Creates a new fork-channel from a main-channel. The channel is unconnected and {@link ForkChannel#connect(String)}
+     * needs to be called to send and receive messages. If FORK is not found in the stack, an exception will be thrown.
+     * @param main_channel The main-channel. The lifetime of the newly created channel will be less than or equal to
+     *                     the main-channel
+     * @param fork_stack_id The ID to associate the fork-stack with in FORK
+     * @param fork_channel_id The ID used to map fork-channel IDs to ForkChannels in the fork-channels protocol stack
+     * @param protocols A list of protocols (<em>from bottom to top</em> !) to insert as the fork_stack in FORK under the
+     *                  given fork_stack_id. If the fork-stack with fork_stack_id already exists, an exception will be
+     *                  thrown.
+     *                  Can be null if no protocols should be added. This may be the case when an app only wants to use
+     *                  a ForkChannel to mux/demux messages, but doesn't need a different protocol stack.
+     * @throws Exception
+     */
+    public ForkChannel(final Channel main_channel, String fork_stack_id, String fork_channel_id,
+                       Protocol ... protocols) throws Exception {
+        this(main_channel, fork_stack_id, fork_channel_id, false, 0, null, protocols);
     }
 
 
@@ -145,6 +166,7 @@ public class ForkChannel extends JChannel implements ChannelListener {
     /** Closes the fork-channel, essentially setting its state to CLOSED. Note that - contrary to a regular channel -
      * a closed fork-channel can be connected again: this means re-attaching the fork-channel to the main-channel*/
     public void close() {
+        ((ForkProtocolStack)prot_stack).remove(fork_channel_id);
         if(state == State.CLOSED)
             return;
         disconnect();                     // leave group if connected
@@ -189,6 +211,10 @@ public class ForkChannel extends JChannel implements ChannelListener {
 
     public void getState(Address target, long timeout) throws Exception {
         throw new UnsupportedOperationException();
+    }
+
+    public void setAddressGenerator(AddressGenerator address_generator) {
+        log.warn("setting of address generator is not supported by fork-channel; address generator is ignored");
     }
 
     protected void setLocalAddress(Address local_addr) {

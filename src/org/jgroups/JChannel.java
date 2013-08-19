@@ -759,6 +759,10 @@ public class JChannel extends Channel {
      */
     public Object down(Event evt) {
         if(evt == null) return null;
+        if(stats && evt.getType() == Event.MSG) {
+            sent_msgs++;
+            sent_bytes+=((Message)evt.getArg()).getLength();
+        }
         return prot_stack.down(evt);
     }
 
